@@ -19,5 +19,5 @@ func main() {
 	p := parser{reader: reader}
 	transactions := p.read()
 
-	writeAll(transactions)
+	writeTransaction(transactions)
 }

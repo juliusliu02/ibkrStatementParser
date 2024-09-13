@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	account   = "Sandbox"
+	account   = "IBKR"
 	csvWriter *csv.Writer
 	header    = []string{
 		"Date",
@@ -27,7 +27,7 @@ var (
 	}
 )
 
-func writeAll(transactions []Transaction) {
+func writeTransaction(transactions []Transaction) {
 	f, err := os.Create("output.csv")
 	if err != nil {
 		panic(err)
@@ -126,7 +126,7 @@ func writeDividend(d *Dividend) {
 		d.date.Format(time.DateOnly), // Date
 		account,                      // Account
 		d.getTransactionType(),       // Transaction Type
-		"",                           // Instrument Type
+		"SECURITY",                   // Instrument Type
 		d.symbol,                     // Symbol
 		"",                           // Quantity
 		d.amount.String(),            // Amount

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/shopspring/decimal"
 	"golang.org/x/text/currency"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -32,7 +33,10 @@ func (p *parser) read() []Transaction {
 		panic(err)
 	}
 
+	var reportDate string
+
 	for _, row := range data {
+
 		if row[1] == "Header" {
 			p.fields = make(map[string]string)
 			p.header = row
@@ -43,6 +47,12 @@ func (p *parser) read() []Transaction {
 			p.fields[p.header[i]] = v
 		}
 		switch tType := findMatch(row); tType {
+		case meta:
+			// Parse metadata
+			if row[2] == "Period" {
+				_, reportDate, _ = strings.Cut(row[3], " - ")
+			}
+			continue
 		case trades:
 			{
 				trade, err := makeTrade(p.fields)
@@ -54,6 +64,10 @@ func (p *parser) read() []Transaction {
 			{
 				forex, err := makeForex(p.fields)
 				if err == nil {
+					forex.time, err = time.Parse("January 2, 2006", reportDate)
+					if err != nil {
+						fmt.Println("failed to parse time: " + reportDate)
+					}
 					p.forexes = append(p.forexes, &forex)
 				}
 			}
@@ -81,10 +95,23 @@ func (p *parser) read() []Transaction {
 					}
 				}
 			}
-		case count, none:
-			if row[0] == "Commission Adjustments" {
-				fmt.Println("A commission adjustment is reported. Please modify the value accordingly:" + strings.Join(row, " "))
+		case feeAdjust:
+			regex, _ := regexp.Compile(`\((.*)\)`)
+			// FindStringSubmatch returns the captured groups in an array.
+			symbol := regex.FindStringSubmatch(p.fields["Description"])[1]
+			if symbol == "" {
+				fmt.Println("An unrecognized commission adjustment is reported. Please modify the value accordingly:" + strings.Join(row, " "))
+			} else {
+				t, err := findTrades(p.trades, p.fields["Date"], symbol)
+				if err == nil {
+					feeAdjust, err := decimal.NewFromString(p.fields["Amount"])
+					if err == nil {
+						t.fee = t.fee.Add(feeAdjust)
+					}
+				}
 			}
+		case count, none:
+			continue
 		}
 	}
 
@@ -109,27 +136,33 @@ type transactionType = int
 
 const (
 	none transactionType = iota // sentinel value
+	meta
 	trades
 	forex
 	cash
 	dividend
 	tax
+	feeAdjust
 	count
 )
 
 func getTemplate(tType transactionType) []string {
 	switch tType {
+	case meta:
+		return []string{"Statement", "Data"}
 	case trades:
 		return []string{"Trades", "Data", "Order", "Stocks"}
 	case forex:
 		return []string{"Trades", "SubTotal", "", "Forex"}
-	// return empty string for invalid transactionType.
 	case cash:
 		return []string{"Deposits & Withdrawals", "Data"}
 	case dividend:
 		return []string{"Dividends", "Data"}
 	case tax:
 		return []string{"Withholding Tax", "Data", "USD"}
+	case feeAdjust:
+		return []string{"Commission Adjustments", "Data", "USD"}
+	// return empty string for invalid transactionType.
 	case count, none:
 		return []string{}
 	}
@@ -186,7 +219,6 @@ func makeTrade(fields map[string]string) (Trade, error) {
 }
 
 func makeForex(fields map[string]string) (Forex, error) {
-	// const timeFormat = "2006-01-02, 15:04:05"
 	var tCurr string
 	var slices = strings.Split(fields["Symbol"], ".")
 	if slices[0] == fields["Currency"] {
@@ -195,9 +227,6 @@ func makeForex(fields map[string]string) (Forex, error) {
 		tCurr = slices[0]
 	}
 
-	// ibkr doesn't have date for subtotal, default to time.Now()
-	// TODO: might change this.
-	t := time.Now()
 	c, err0 := currency.ParseISO(fields["Currency"])
 	tc, err1 := currency.ParseISO(tCurr)
 	q, err2 := decimal.NewFromString(fields["Quantity"])
@@ -211,7 +240,6 @@ func makeForex(fields map[string]string) (Forex, error) {
 	}
 
 	return Forex{
-		time:       t,
 		curr:       c,
 		targetCurr: tc,
 		quantity:   q,
@@ -256,12 +284,11 @@ func makeDividend(fields map[string]string) (Dividend, error) {
 	}, nil
 }
 
-// TODO: comm adjustment.
 /* Returns the first transaction that matches with the conditions. */
 func findDividend(ds []*Dividend, t string, symbol string) (*Dividend, error) {
 	date, err := time.Parse(time.DateOnly, t)
 	if err != nil {
-		return &Dividend{}, errors.New("Invalid date:" + err.Error())
+		return &Dividend{}, errors.New("invalid date:" + err.Error())
 	}
 	for _, v := range ds {
 		if v.date.Truncate(24*time.Hour) == date.Truncate(24*time.Hour) &&
@@ -270,4 +297,18 @@ func findDividend(ds []*Dividend, t string, symbol string) (*Dividend, error) {
 		}
 	}
 	return &Dividend{}, errors.New("dividend not found")
+}
+
+func findTrades(ds []*Trade, t string, symbol string) (*Trade, error) {
+	date, err := time.Parse(time.DateOnly, t)
+	if err != nil {
+		return &Trade{}, errors.New("invalid date:" + err.Error())
+	}
+	for _, v := range ds {
+		if v.time.Truncate(24*time.Hour) == date.Truncate(24*time.Hour) &&
+			v.symbol == symbol {
+			return v, nil
+		}
+	}
+	return &Trade{}, errors.New("dividend not found")
 }
