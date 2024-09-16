@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"os"
 	"time"
 )
@@ -32,7 +33,12 @@ func writeTransaction(transactions []Transaction) {
 	if err != nil {
 		panic(err)
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(f)
 
 	csvWriter = csv.NewWriter(f)
 	err = csvWriter.Write(header)
@@ -40,7 +46,6 @@ func writeTransaction(transactions []Transaction) {
 		return
 	}
 	for _, tx := range transactions {
-		// fmt.Println(tx.getTransactionType())
 		switch v := tx.(type) {
 		case *Cash:
 			writeCash(v)
@@ -84,7 +89,7 @@ func writeTrade(t *Trade) {
 		t.getTransactionType(),       // Transaction Type
 		"SECURITY",                   // Instrument Type
 		t.symbol,                     // Symbol
-		t.quantity.String(),          // Quantity
+		t.quantity.Abs().String(),    // Quantity
 		t.amount.Abs().String(),      // Amount
 		t.curr.String(),              // Currency
 		t.fee.Abs().String(),         // Fees

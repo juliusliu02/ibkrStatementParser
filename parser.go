@@ -18,7 +18,6 @@ Transaction data types.
 */
 type parser struct {
 	reader    *csv.Reader
-	tType     transactionType
 	header    []string
 	fields    map[string]string
 	trades    []*Trade
@@ -52,7 +51,6 @@ func (p *parser) read() []Transaction {
 			if row[2] == "Period" {
 				_, reportDate, _ = strings.Cut(row[3], " - ")
 			}
-			continue
 		case trades:
 			{
 				trade, err := makeTrade(p.fields)
@@ -132,10 +130,12 @@ func (p *parser) read() []Transaction {
 	return transactions
 }
 
-type transactionType = int
+/* Constants and type alias. */
+
+type recordType = int
 
 const (
-	none transactionType = iota // sentinel value
+	none recordType = iota // sentinel value
 	meta
 	trades
 	forex
@@ -146,7 +146,7 @@ const (
 	count
 )
 
-func getTemplate(tType transactionType) []string {
+func getTemplate(tType recordType) []string {
 	switch tType {
 	case meta:
 		return []string{"Statement", "Data"}
@@ -162,7 +162,7 @@ func getTemplate(tType transactionType) []string {
 		return []string{"Withholding Tax", "Data", "USD"}
 	case feeAdjust:
 		return []string{"Commission Adjustments", "Data", "USD"}
-	// return empty string for invalid transactionType.
+	// return empty string for invalid recordType.
 	case count, none:
 		return []string{}
 	}
@@ -170,7 +170,9 @@ func getTemplate(tType transactionType) []string {
 	return []string{}
 }
 
-func findMatch(row []string) transactionType {
+/* Functions to match records to corresponding transactionTypes. */
+
+func findMatch(row []string) recordType {
 	for i := range count {
 		if matchStart(row, i) {
 			return i
@@ -179,8 +181,8 @@ func findMatch(row []string) transactionType {
 	return none
 }
 
-/* Match the start of the string to a template. Return false if transactionType is invalid. */
-func matchStart(row []string, tType transactionType) bool {
+/* Match the start of the string to a template. Return false if recordType is invalid. */
+func matchStart(row []string, tType recordType) bool {
 	tem := getTemplate(tType)
 	// len(tem) == 0 when tType is invalid.
 	if len(tem) == 0 || len(row) < len(tem) {
@@ -193,6 +195,9 @@ func matchStart(row []string, tType transactionType) bool {
 	}
 	return true
 }
+
+/* Struct initializers that read from fields and populate data into structs.
+Change keys if there are any changes to the CSV source file. */
 
 func makeTrade(fields map[string]string) (Trade, error) {
 	const timeFormat = "2006-01-02, 15:04:05"
