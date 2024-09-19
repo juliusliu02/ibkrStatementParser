@@ -1,3 +1,5 @@
+# `ibkrStatementParser` Readme
+
 `ibkrStatementParser` is a tool designed to parse Interactive Broker's statements in CSV format and extracts relevant trade records. With this tool, users can easily convert their statements into CSV files that can be directly imported into [Portfolio Profit](https://portfolioprofit.app/).
 
 ## Usage
