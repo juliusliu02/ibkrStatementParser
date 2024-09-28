@@ -17,13 +17,14 @@ import (
 Transaction data types.
 */
 type parser struct {
-	reader    *csv.Reader
-	header    []string
-	fields    map[string]string
-	trades    []*Trade
-	forexes   []*Forex
-	cashes    []*Cash
-	dividends []*Dividend
+	reader     *csv.Reader
+	header     []string
+	fields     map[string]string
+	trades     []*Trade
+	forexes    []*Forex
+	cashes     []*Cash
+	dividends  []*Dividend
+	reportDate string
 }
 
 func (p *parser) read() []Transaction {
@@ -32,85 +33,18 @@ func (p *parser) read() []Transaction {
 		panic(err)
 	}
 
-	var reportDate string
-
 	for _, row := range data {
-
+		// A new section encountered.
 		if row[1] == "Header" {
 			p.fields = make(map[string]string)
 			p.header = row
 			continue
 		}
+		// Populate elements into map.
 		for i, v := range row {
-			// populate elements in map
 			p.fields[p.header[i]] = v
 		}
-		switch tType := findMatch(row); tType {
-		case meta:
-			// Parse metadata
-			if row[2] == "Period" {
-				_, reportDate, _ = strings.Cut(row[3], " - ")
-			}
-		case trades:
-			{
-				trade, err := makeTrade(p.fields)
-				if err == nil {
-					p.trades = append(p.trades, &trade)
-				}
-			}
-		case forex:
-			{
-				forex, err := makeForex(p.fields)
-				if err == nil {
-					forex.time, err = time.Parse("January 2, 2006", reportDate)
-					if err != nil {
-						fmt.Println("failed to parse time: " + reportDate)
-					}
-					p.forexes = append(p.forexes, &forex)
-				}
-			}
-		case cash:
-			{
-				cash, err := makeCash(p.fields)
-				if err == nil {
-					p.cashes = append(p.cashes, &cash)
-				}
-			}
-		case dividend:
-			{
-				dividend, err := makeDividend(p.fields)
-				if err == nil {
-					p.dividends = append(p.dividends, &dividend)
-				}
-			}
-		case tax:
-			{
-				if dividend, err := findDividend(p.dividends, p.fields["Date"],
-					strings.Split(p.fields["Description"], "(")[0]); err == nil {
-					t, err := decimal.NewFromString(p.fields["Amount"])
-					if err == nil {
-						(*dividend).setTax(t)
-					}
-				}
-			}
-		case feeAdjust:
-			regex, _ := regexp.Compile(`\((.*)\)`)
-			// FindStringSubmatch returns the captured groups in an array.
-			symbol := regex.FindStringSubmatch(p.fields["Description"])[1]
-			if symbol == "" {
-				fmt.Println("An unrecognized commission adjustment is reported. Please modify the value accordingly:" + strings.Join(row, " "))
-			} else {
-				t, err := findTrades(p.trades, p.fields["Date"], symbol)
-				if err == nil {
-					feeAdjust, err := decimal.NewFromString(p.fields["Amount"])
-					if err == nil {
-						t.fee = t.fee.Add(feeAdjust)
-					}
-				}
-			}
-		case count, none:
-			continue
-		}
+		p.readLine(row)
 	}
 
 	transactions := make([]Transaction, 0)
@@ -128,6 +62,76 @@ func (p *parser) read() []Transaction {
 		transactions = append(transactions, dividend)
 	}
 	return transactions
+}
+
+func (p *parser) readLine(row []string) {
+	switch tType := findMatch(row); tType {
+	case meta:
+		// Parse metadata
+		if row[2] == "Period" {
+			_, p.reportDate, _ = strings.Cut(row[3], " - ")
+		}
+	case trades:
+		{
+			trade, err := makeTrade(p.fields)
+			if err == nil {
+				p.trades = append(p.trades, &trade)
+			}
+		}
+	case forex:
+		{
+			forex, err := makeForex(p.fields)
+			if err == nil {
+				forex.time, err = time.Parse("January 2, 2006", p.reportDate)
+				if err != nil {
+					fmt.Println("failed to parse time: " + p.reportDate)
+				}
+				p.forexes = append(p.forexes, &forex)
+			}
+		}
+	case cash:
+		{
+			cash, err := makeCash(p.fields)
+			if err == nil {
+				p.cashes = append(p.cashes, &cash)
+			}
+		}
+	case dividend:
+		{
+			dividend, err := makeDividend(p.fields)
+			if err == nil {
+				p.dividends = append(p.dividends, &dividend)
+			}
+		}
+	case tax:
+		{
+			if dividend, err := findDividend(p.dividends, p.fields["Date"],
+				strings.Split(p.fields["Description"], "(")[0]); err == nil {
+				t, err := decimal.NewFromString(p.fields["Amount"])
+				if err == nil {
+					(*dividend).setTax(t)
+				}
+			}
+		}
+	case feeAdjust:
+		regex, _ := regexp.Compile(`\((.*)\)`)
+		// FindStringSubmatch returns the captured groups in an array.
+		symbol := regex.FindStringSubmatch(p.fields["Description"])[1]
+		if symbol == "" {
+			fmt.Println("An unrecognized commission adjustment is reported. Please modify the value accordingly:" + strings.Join(row, " "))
+		} else {
+			t, err := findTrades(p.trades, p.fields["Date"], symbol)
+			if err == nil {
+				feeAdjust, err := decimal.NewFromString(p.fields["Amount"])
+				if err == nil {
+					t.fee = t.fee.Add(feeAdjust)
+				}
+			}
+		}
+	case none:
+	case count:
+		return
+	}
 }
 
 /* Constants and type alias. */
@@ -163,11 +167,9 @@ func getTemplate(tType recordType) []string {
 	case feeAdjust:
 		return []string{"Commission Adjustments", "Data", "USD"}
 	// return empty string for invalid recordType.
-	case count, none:
+	default:
 		return []string{}
 	}
-	// shouldn't execute.
-	return []string{}
 }
 
 /* Functions to match records to corresponding transactionTypes. */
