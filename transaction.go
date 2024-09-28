@@ -8,6 +8,7 @@ import (
 
 type Transaction interface {
 	getTransactionType() string
+	write()
 }
 
 type Trade struct {
@@ -71,4 +72,92 @@ func (d *Dividend) getTransactionType() string {
 
 func (d *Dividend) setTax(dec decimal.Decimal) {
 	d.tax = dec
+}
+
+func (c *Cash) write() {
+	err := csvWriter.Write([]string{
+		c.date.Format(time.DateOnly), // Date
+		account,                      // Account
+		c.getTransactionType(),       // Transaction Type
+		"",                           // Instrument Type
+		"",                           // Symbol
+		"",                           // Quantity
+		c.amount.Abs().String(),      // Amount
+		c.curr.String(),              // Currency
+		"",                           // Fees
+		"",                           // Fees Currency
+		"",                           // Taxes
+		"",                           // Taxes Currency
+		"",                           // Converted
+		"",                           // Converted Currency
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *Trade) write() {
+	err := csvWriter.Write([]string{
+		t.time.Format(time.DateTime), // Date
+		account,                      // Account
+		t.getTransactionType(),       // Transaction Type
+		"SECURITY",                   // Instrument Type
+		t.symbol,                     // Symbol
+		t.quantity.Abs().String(),    // Quantity
+		t.amount.Abs().String(),      // Amount
+		t.curr.String(),              // Currency
+		t.fee.Abs().String(),         // Fees
+		t.curr.String(),              // Fees Currency
+		"",                           // Taxes
+		"",                           // Taxes Currency
+		"",                           // Converted
+		"",                           // Converted Currency
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (f *Forex) write() {
+	err := csvWriter.Write([]string{
+		f.time.Format(time.DateTime), // Date
+		account,                      // Account
+		f.getTransactionType(),       // Transaction Type
+		"",                           // Instrument Type
+		"",                           // Symbol
+		"",                           // Quantity
+		f.amount.Abs().String(),      // Amount
+		f.curr.String(),              // Currency
+		f.fee.Abs().String(),         // Fees
+		"USD",                        // Fees Currency
+		"",                           // Taxes
+		"",                           // Taxes Currency
+		f.quantity.String(),          // Converted
+		f.targetCurr.String(),        // Converted Currency
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (d *Dividend) write() {
+	err := csvWriter.Write([]string{
+		d.date.Format(time.DateOnly), // Date
+		account,                      // Account
+		d.getTransactionType(),       // Transaction Type
+		"SECURITY",                   // Instrument Type
+		d.symbol,                     // Symbol
+		"",                           // Quantity
+		d.amount.String(),            // Amount
+		d.curr.String(),              // Currency
+		"",                           // Fees
+		"",                           // Fees Currency
+		d.tax.Abs().String(),         // Taxes
+		d.curr.String(),              // Taxes Currency
+		"",                           // Converted
+		"",                           // Converted Currency
+	})
+	if err != nil {
+		panic(err)
+	}
 }
