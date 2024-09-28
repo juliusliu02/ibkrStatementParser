@@ -1,3 +1,5 @@
+# IBKR Statement Parser
+
 `ibkrStatementParser` is a tool designed to parse Interactive Broker's statements in CSV format and extracts relevant trade records. With this tool, users can easily convert their statements into CSV files that can be directly imported into [Portfolio Profit](https://portfolioprofit.app/).
 
 ## Usage
@@ -15,9 +17,9 @@ The parser is responsible for reading from CSV file, filters out the data rows, 
 #### Variables
 
 - `reader`: reads from CSV.
-- `header`: store headers.
+- `header`: stores headers.
 - `map`: maps header to data.
-- `trades`, `forexes`, `cashes`, `dividends`: arrays that stores pointers to `transaction` structs.
+- `trades`, `forexes`, `cashes`, `dividends`: store pointers to `transaction` structs.
 
 The parser recognizes data rows by matching the starting fields of rows with pre-defined templates. If a match is found, the row is considered valid.
 
